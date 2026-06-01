@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, useInView, AnimatePresence } from 'framer-motion'
 import {
   Code2,
@@ -18,15 +18,15 @@ import {
   MapPin,
   Phone,
   ChevronUp,
-  ExternalLink,
   Sparkles,
   Monitor,
   Layers,
   Rocket,
-  Heart,
   Users,
   Award,
   Coffee,
+  ShoppingCart,
+  Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -53,8 +53,275 @@ function Section({ children, className = '', id }: { children: React.ReactNode; 
   )
 }
 
+/* ───────────────────── Order Modal ───────────────────── */
+function OrderModal({
+  open,
+  onClose,
+  preselectedPlan,
+}: {
+  open: boolean
+  onClose: () => void
+  preselectedPlan?: string
+}) {
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    plan: preselectedPlan || '',
+    projectType: '',
+    budget: '',
+    message: '',
+  })
+  const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const [error, setError] = useState('')
+
+  // Update plan when preselectedPlan changes
+  useEffect(() => {
+    if (preselectedPlan) {
+      setFormData((prev) => ({ ...prev, plan: preselectedPlan }))
+    }
+  }, [preselectedPlan])
+
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault()
+      setError('')
+
+      if (!formData.name || !formData.email || !formData.plan || !formData.message) {
+        setError('Please fill in all required fields.')
+        return
+      }
+
+      setLoading(true)
+      try {
+        const res = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+        })
+        const data = await res.json()
+
+        if (!res.ok) {
+          setError(data.error || 'Something went wrong. Please try again.')
+          return
+        }
+
+        setSuccess(true)
+        setFormData({ name: '', email: '', phone: '', plan: '', projectType: '', budget: '', message: '' })
+
+        // Auto-close after 3 seconds
+        setTimeout(() => {
+          setSuccess(false)
+          onClose()
+        }, 3000)
+      } catch {
+        setError('Network error. Please check your connection and try again.')
+      } finally {
+        setLoading(false)
+      }
+    },
+    [formData, onClose]
+  )
+
+  const updateField = (field: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }))
+  }
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) onClose()
+          }}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+
+          {/* Modal */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+            className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl"
+          >
+            {/* Close button */}
+            <button
+              onClick={onClose}
+              className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4 text-gray-500" />
+            </button>
+
+            {success ? (
+              <div className="p-8 flex flex-col items-center justify-center min-h-[300px] text-center">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+                  className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mb-6"
+                >
+                  <Check className="w-10 h-10 text-emerald-600" />
+                </motion.div>
+                <h3 className="text-2xl font-bold text-gray-900">Order Placed!</h3>
+                <p className="text-gray-500 mt-2 leading-relaxed">
+                  Thank you! We&apos;ve received your order and will get back to you within 24 hours.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Header */}
+                <div className="p-6 pb-0">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+                      <ShoppingCart className="w-5 h-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900">Place Your Order</h2>
+                      <p className="text-gray-400 text-sm">Fill in the details and we&apos;ll reach out</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Form */}
+                <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                  {error && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-red-700 text-sm">
+                      {error}
+                    </div>
+                  )}
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1.5 block">
+                        Name <span className="text-red-500">*</span>
+                      </label>
+                      <Input
+                        placeholder="Your full name"
+                        className="h-11 rounded-lg"
+                        value={formData.name}
+                        onChange={(e) => updateField('name', e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1.5 block">
+                        Email <span className="text-red-500">*</span>
+                      </label>
+                      <Input
+                        type="email"
+                        placeholder="you@example.com"
+                        className="h-11 rounded-lg"
+                        value={formData.email}
+                        onChange={(e) => updateField('email', e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1.5 block">Phone</label>
+                      <Input
+                        type="tel"
+                        placeholder="+1 (555) 000-0000"
+                        className="h-11 rounded-lg"
+                        value={formData.phone}
+                        onChange={(e) => updateField('phone', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1.5 block">
+                        Plan <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        className="w-full h-11 rounded-lg border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        value={formData.plan}
+                        onChange={(e) => updateField('plan', e.target.value)}
+                        required
+                      >
+                        <option value="">Select a plan</option>
+                        <option value="Starter — $499">Starter — $499</option>
+                        <option value="Professional — $1,299">Professional — $1,299</option>
+                        <option value="Enterprise — Custom">Enterprise — Custom</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1.5 block">Project Type</label>
+                      <Input
+                        placeholder="e.g. E-Commerce, Portfolio"
+                        className="h-11 rounded-lg"
+                        value={formData.projectType}
+                        onChange={(e) => updateField('projectType', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 mb-1.5 block">Budget Range</label>
+                      <select
+                        className="w-full h-11 rounded-lg border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        value={formData.budget}
+                        onChange={(e) => updateField('budget', e.target.value)}
+                      >
+                        <option value="">Select budget</option>
+                        <option value="$499 - $999">$499 - $999</option>
+                        <option value="$1,000 - $2,999">$1,000 - $2,999</option>
+                        <option value="$3,000 - $5,000">$3,000 - $5,000</option>
+                        <option value="$5,000+">$5,000+</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-1.5 block">
+                      Tell us about your project <span className="text-red-500">*</span>
+                    </label>
+                    <Textarea
+                      placeholder="Describe your project, goals, and any special requirements..."
+                      rows={4}
+                      className="rounded-lg resize-none"
+                      value={formData.message}
+                      onChange={(e) => updateField('message', e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <Button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-full h-12 text-base font-semibold shadow-lg shadow-emerald-600/20"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 mr-2 animate-spin" /> Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <ShoppingCart className="w-5 h-5 mr-2" /> Place Order
+                      </>
+                    )}
+                  </Button>
+                </form>
+              </>
+            )}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 /* ───────────────────── Navbar ───────────────────── */
-function Navbar() {
+function Navbar({ onOrder }: { onOrder: (plan?: string) => void }) {
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -80,7 +347,6 @@ function Navbar() {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20">
-          {/* Logo */}
           <a href="#" className="flex items-center gap-2 group">
             <div className="w-9 h-9 rounded-lg bg-emerald-600 flex items-center justify-center group-hover:bg-emerald-700 transition-colors">
               <Code2 className="w-5 h-5 text-white" />
@@ -90,7 +356,6 @@ function Navbar() {
             </span>
           </a>
 
-          {/* Desktop links */}
           <div className="hidden md:flex items-center gap-8">
             {links.map((l) => (
               <a
@@ -101,12 +366,14 @@ function Navbar() {
                 {l.label}
               </a>
             ))}
-            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full px-6">
-              Get Started <ArrowRight className="w-4 h-4 ml-1" />
+            <Button
+              onClick={() => onOrder()}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full px-6"
+            >
+              Order Now <ShoppingCart className="w-4 h-4 ml-1" />
             </Button>
           </div>
 
-          {/* Mobile toggle */}
           <button
             className="md:hidden p-2 text-gray-700"
             onClick={() => setMobileOpen(!mobileOpen)}
@@ -117,7 +384,6 @@ function Navbar() {
         </div>
       </div>
 
-      {/* Mobile menu */}
       <AnimatePresence>
         {mobileOpen && (
           <motion.div
@@ -137,8 +403,14 @@ function Navbar() {
                   {l.label}
                 </a>
               ))}
-              <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-full">
-                Get Started <ArrowRight className="w-4 h-4 ml-1" />
+              <Button
+                onClick={() => {
+                  setMobileOpen(false)
+                  onOrder()
+                }}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-full"
+              >
+                Order Now <ShoppingCart className="w-4 h-4 ml-1" />
               </Button>
             </div>
           </motion.div>
@@ -149,27 +421,20 @@ function Navbar() {
 }
 
 /* ───────────────────── Hero ───────────────────── */
-function Hero() {
+function Hero({ onOrder }: { onOrder: (plan?: string) => void }) {
   return (
     <section className="relative min-h-screen flex items-center overflow-hidden">
-      {/* Background */}
       <div className="absolute inset-0">
         <img src="/hero-bg.png" alt="" className="w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-br from-gray-950/90 via-gray-900/80 to-emerald-950/70" />
       </div>
 
-      {/* Decorative shapes */}
       <div className="absolute top-20 left-10 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl animate-float" />
       <div className="absolute bottom-20 right-10 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl animate-float" style={{ animationDelay: '1.5s' }} />
 
-      {/* Content */}
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-32 sm:py-40">
         <div className="max-w-3xl">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 px-4 py-1.5 text-sm mb-6 rounded-full">
               <Sparkles className="w-4 h-4 mr-1.5" />
               Professional Web Development
@@ -203,15 +468,23 @@ function Hero() {
             transition={{ duration: 0.6, delay: 0.45 }}
             className="mt-10 flex flex-wrap gap-4"
           >
-            <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full px-8 h-13 text-base shadow-lg shadow-emerald-600/30">
-              Start Your Project <ArrowRight className="w-5 h-5 ml-2" />
+            <Button
+              size="lg"
+              onClick={() => onOrder()}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full px-8 h-13 text-base shadow-lg shadow-emerald-600/30"
+            >
+              Order Now <ShoppingCart className="w-5 h-5 ml-2" />
             </Button>
-            <Button size="lg" variant="outline" className="border-white/20 text-white hover:bg-white/10 rounded-full px-8 h-13 text-base">
-              View Our Work
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={() => onOrder()}
+              className="border-white/20 text-white hover:bg-white/10 rounded-full px-8 h-13 text-base"
+            >
+              Get a Quote
             </Button>
           </motion.div>
 
-          {/* Stats */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -232,7 +505,6 @@ function Hero() {
         </div>
       </div>
 
-      {/* Scroll indicator */}
       <motion.div
         animate={{ y: [0, 8, 0] }}
         transition={{ repeat: Infinity, duration: 2 }}
@@ -286,11 +558,10 @@ const services = [
   },
 ]
 
-function Services() {
+function Services({ onOrder }: { onOrder: (plan?: string) => void }) {
   return (
     <Section id="services" className="py-20 sm:py-28 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
         <div className="text-center max-w-2xl mx-auto mb-16">
           <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 px-4 py-1.5 mb-4 rounded-full">
             What We Do
@@ -303,7 +574,6 @@ function Services() {
           </p>
         </div>
 
-        {/* Grid */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
           {services.map((s, i) => (
             <motion.div
@@ -321,7 +591,13 @@ function Services() {
                     <s.icon className="w-7 h-7 text-white" />
                   </div>
                   <h3 className="text-xl font-semibold text-gray-900 mb-3">{s.title}</h3>
-                  <p className="text-gray-500 leading-relaxed">{s.desc}</p>
+                  <p className="text-gray-500 leading-relaxed mb-4">{s.desc}</p>
+                  <button
+                    onClick={() => onOrder()}
+                    className="text-emerald-600 text-sm font-semibold hover:text-emerald-700 transition-colors inline-flex items-center gap-1"
+                  >
+                    Order This Service <ArrowRight className="w-4 h-4" />
+                  </button>
                 </CardContent>
               </Card>
             </motion.div>
@@ -354,11 +630,10 @@ const projects = [
   },
 ]
 
-function Portfolio() {
+function Portfolio({ onOrder }: { onOrder: (plan?: string) => void }) {
   return (
     <Section id="portfolio" className="py-20 sm:py-28 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
         <div className="text-center max-w-2xl mx-auto mb-16">
           <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 px-4 py-1.5 mb-4 rounded-full">
             Our Work
@@ -371,7 +646,6 @@ function Portfolio() {
           </p>
         </div>
 
-        {/* Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
           {projects.map((p, i) => (
             <motion.div
@@ -389,8 +663,12 @@ function Portfolio() {
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6">
-                    <Button size="sm" className="bg-white/20 backdrop-blur-sm text-white border-white/30 rounded-full hover:bg-white/30">
-                      View Project <ExternalLink className="w-4 h-4 ml-1.5" />
+                    <Button
+                      size="sm"
+                      onClick={() => onOrder()}
+                      className="bg-white/20 backdrop-blur-sm text-white border-white/30 rounded-full hover:bg-white/30"
+                    >
+                      Order Similar <ShoppingCart className="w-4 h-4 ml-1.5" />
                     </Button>
                   </div>
                 </div>
@@ -436,7 +714,6 @@ function Testimonials() {
   return (
     <Section id="testimonials" className="py-20 sm:py-28 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
         <div className="text-center max-w-2xl mx-auto mb-16">
           <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 px-4 py-1.5 mb-4 rounded-full">
             Testimonials
@@ -449,7 +726,6 @@ function Testimonials() {
           </p>
         </div>
 
-        {/* Grid */}
         <div className="grid md:grid-cols-3 gap-8">
           {testimonials.map((t, i) => (
             <motion.div
@@ -461,7 +737,6 @@ function Testimonials() {
             >
               <Card className="h-full border-0 shadow-sm hover:shadow-lg transition-shadow rounded-2xl">
                 <CardContent className="p-6 lg:p-8">
-                  {/* Stars */}
                   <div className="flex gap-1 mb-4">
                     {Array.from({ length: t.stars }).map((_, si) => (
                       <Star key={si} className="w-5 h-5 fill-amber-400 text-amber-400" />
@@ -492,6 +767,7 @@ const plans = [
   {
     name: 'Starter',
     price: '$499',
+    planValue: 'Starter — $499',
     desc: 'Perfect for small businesses and personal brands getting started online.',
     features: [
       'Responsive 5-page website',
@@ -501,12 +777,12 @@ const plans = [
       'Contact form integration',
       '1 revision round',
     ],
-    cta: 'Get Started',
     popular: false,
   },
   {
     name: 'Professional',
     price: '$1,299',
+    planValue: 'Professional — $1,299',
     desc: 'Ideal for growing businesses that need a strong online presence and more functionality.',
     features: [
       'Up to 15 pages',
@@ -518,12 +794,12 @@ const plans = [
       '3 revision rounds',
       'Priority support',
     ],
-    cta: 'Most Popular',
     popular: true,
   },
   {
     name: 'Enterprise',
     price: 'Custom',
+    planValue: 'Enterprise — Custom',
     desc: 'For large-scale projects that demand advanced features, integrations, and dedicated support.',
     features: [
       'Unlimited pages',
@@ -535,16 +811,14 @@ const plans = [
       'Unlimited revisions',
       'Dedicated project manager',
     ],
-    cta: 'Contact Us',
     popular: false,
   },
 ]
 
-function Pricing() {
+function Pricing({ onOrder }: { onOrder: (plan?: string) => void }) {
   return (
     <Section id="pricing" className="py-20 sm:py-28 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
         <div className="text-center max-w-2xl mx-auto mb-16">
           <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 px-4 py-1.5 mb-4 rounded-full">
             Pricing
@@ -557,7 +831,6 @@ function Pricing() {
           </p>
         </div>
 
-        {/* Cards */}
         <div className="grid md:grid-cols-3 gap-8 items-start">
           {plans.map((p, i) => (
             <motion.div
@@ -598,13 +871,14 @@ function Pricing() {
                     ))}
                   </ul>
                   <Button
+                    onClick={() => onOrder(p.planValue)}
                     className={`w-full mt-8 rounded-full h-11 ${
                       p.popular
                         ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20'
                         : 'bg-gray-900 hover:bg-gray-800 text-white'
                     }`}
                   >
-                    {p.cta}
+                    <ShoppingCart className="w-4 h-4 mr-1.5" /> Order Now
                   </Button>
                 </CardContent>
               </Card>
@@ -624,16 +898,14 @@ const stats = [
   { icon: Rocket, num: '99.9%', label: 'Uptime Guarantee' },
 ]
 
-function About() {
+function About({ onOrder }: { onOrder: (plan?: string) => void }) {
   return (
     <Section id="about" className="py-20 sm:py-28 bg-emerald-950 text-white relative overflow-hidden">
-      {/* Decorative */}
       <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
       <div className="absolute bottom-0 left-0 w-72 h-72 bg-teal-500/10 rounded-full blur-3xl" />
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid lg:grid-cols-2 gap-16 items-center">
-          {/* Text */}
           <div>
             <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 px-4 py-1.5 mb-4 rounded-full">
               About Us
@@ -648,12 +920,15 @@ function About() {
             <p className="mt-4 text-gray-400 leading-relaxed">
               Our team of designers, developers, and strategists work closely with each client to understand their unique needs and deliver solutions that exceed expectations. From startups to enterprises, we approach every project with the same level of dedication and creative energy, ensuring your digital presence stands out in a crowded marketplace.
             </p>
-            <Button size="lg" className="mt-8 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full px-8 shadow-lg shadow-emerald-600/30">
-              Learn More <ArrowRight className="w-5 h-5 ml-2" />
+            <Button
+              size="lg"
+              onClick={() => onOrder()}
+              className="mt-8 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full px-8 shadow-lg shadow-emerald-600/30"
+            >
+              Order Now <ShoppingCart className="w-5 h-5 ml-2" />
             </Button>
           </div>
 
-          {/* Stats grid */}
           <div className="grid grid-cols-2 gap-6">
             {stats.map((s, i) => (
               <motion.div
@@ -707,7 +982,6 @@ function Process() {
   return (
     <Section className="py-20 sm:py-28 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
         <div className="text-center max-w-2xl mx-auto mb-16">
           <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 px-4 py-1.5 mb-4 rounded-full">
             Our Process
@@ -720,7 +994,6 @@ function Process() {
           </p>
         </div>
 
-        {/* Steps */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
           {steps.map((s, i) => (
             <motion.div
@@ -750,7 +1023,7 @@ function Process() {
 }
 
 /* ───────────────────── CTA Banner ───────────────────── */
-function CtaBanner() {
+function CtaBanner({ onOrder }: { onOrder: (plan?: string) => void }) {
   return (
     <Section className="py-20 sm:py-28 bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-700 relative overflow-hidden">
       <div className="absolute inset-0 opacity-10">
@@ -764,14 +1037,23 @@ function CtaBanner() {
           <span className="text-emerald-200">Amazing?</span>
         </h2>
         <p className="mt-6 text-emerald-100 text-lg leading-relaxed">
-          Let us turn your vision into reality. Get a free consultation and discover how we can help grow your business with a stunning, high-performing website.
+          Let us turn your vision into reality. Place your order now and get a stunning, high-performing website for your business.
         </p>
         <div className="mt-10 flex flex-wrap justify-center gap-4">
-          <Button size="lg" className="bg-white text-emerald-700 hover:bg-emerald-50 rounded-full px-8 h-13 text-base font-semibold shadow-lg">
-            Start Your Project <ArrowRight className="w-5 h-5 ml-2" />
+          <Button
+            size="lg"
+            onClick={() => onOrder()}
+            className="bg-white text-emerald-700 hover:bg-emerald-50 rounded-full px-8 h-13 text-base font-semibold shadow-lg"
+          >
+            Order Now <ShoppingCart className="w-5 h-5 ml-2" />
           </Button>
-          <Button size="lg" variant="outline" className="border-white/30 text-white hover:bg-white/10 rounded-full px-8 h-13 text-base">
-            Schedule a Call
+          <Button
+            size="lg"
+            variant="outline"
+            onClick={() => onOrder()}
+            className="border-white/30 text-white hover:bg-white/10 rounded-full px-8 h-13 text-base"
+          >
+            Get a Quote
           </Button>
         </div>
       </div>
@@ -780,20 +1062,56 @@ function CtaBanner() {
 }
 
 /* ───────────────────── Contact ───────────────────── */
-function Contact() {
+function Contact({ onOrder }: { onOrder: (plan?: string) => void }) {
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    message: '',
+  })
+  const [loading, setLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [error, setError] = useState('')
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setSubmitted(true)
-    setTimeout(() => setSubmitted(false), 4000)
+    setError('')
+
+    if (!formData.name || !formData.email || !formData.message) {
+      setError('Please fill in all fields.')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          plan: 'Contact / Inquiry',
+        }),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || 'Something went wrong.')
+        return
+      }
+
+      setSubmitted(true)
+      setFormData({ name: '', email: '', message: '' })
+      setTimeout(() => setSubmitted(false), 5000)
+    } catch {
+      setError('Network error. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
     <Section id="contact" className="py-20 sm:py-28 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid lg:grid-cols-2 gap-16">
-          {/* Info */}
           <div>
             <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 px-4 py-1.5 mb-4 rounded-full">
               Get In Touch
@@ -802,7 +1120,7 @@ function Contact() {
               Let&apos;s Start Your <span className="text-emerald-600">Project</span>
             </h2>
             <p className="mt-4 text-gray-500 text-lg leading-relaxed">
-              Have an idea? We would love to hear about it. Fill out the form and we will get back to you within 24 hours with a free project estimate.
+              Have an idea? We would love to hear about it. Fill out the form and we will get back to you within 24 hours.
             </p>
 
             <div className="mt-10 space-y-6">
@@ -819,9 +1137,16 @@ function Contact() {
                 </div>
               ))}
             </div>
+
+            <Button
+              size="lg"
+              onClick={() => onOrder()}
+              className="mt-8 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full px-8 shadow-lg shadow-emerald-600/20"
+            >
+              Order Now <ShoppingCart className="w-5 h-5 ml-2" />
+            </Button>
           </div>
 
-          {/* Form */}
           <Card className="border-0 shadow-lg rounded-2xl">
             <CardContent className="p-6 lg:p-8">
               {submitted ? (
@@ -838,38 +1163,57 @@ function Contact() {
                 </motion.div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-5">
-                  <div className="grid sm:grid-cols-2 gap-5">
-                    <div>
-                      <label className="text-sm font-medium text-gray-700 mb-1.5 block">First Name</label>
-                      <Input placeholder="John" className="h-11 rounded-lg" required />
+                  {error && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-red-700 text-sm">
+                      {error}
                     </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700 mb-1.5 block">Last Name</label>
-                      <Input placeholder="Doe" className="h-11 rounded-lg" required />
-                    </div>
+                  )}
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-1.5 block">Name</label>
+                    <Input
+                      placeholder="Your name"
+                      className="h-11 rounded-lg"
+                      value={formData.name}
+                      onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
+                      required
+                    />
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-700 mb-1.5 block">Email</label>
-                    <Input type="email" placeholder="john@example.com" className="h-11 rounded-lg" required />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 mb-1.5 block">Project Type</label>
-                    <Input placeholder="e.g. E-Commerce, Portfolio, SaaS" className="h-11 rounded-lg" />
+                    <Input
+                      type="email"
+                      placeholder="you@example.com"
+                      className="h-11 rounded-lg"
+                      value={formData.email}
+                      onChange={(e) => setFormData((p) => ({ ...p, email: e.target.value }))}
+                      required
+                    />
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-700 mb-1.5 block">Message</label>
                     <Textarea
                       placeholder="Tell us about your project..."
-                      rows={4}
+                      rows={5}
                       className="rounded-lg resize-none"
+                      value={formData.message}
+                      onChange={(e) => setFormData((p) => ({ ...p, message: e.target.value }))}
                       required
                     />
                   </div>
                   <Button
                     type="submit"
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-full h-11 text-base"
+                    disabled={loading}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-full h-11 text-base"
                   >
-                    Send Message <ArrowRight className="w-4 h-4 ml-2" />
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending...
+                      </>
+                    ) : (
+                      <>
+                        Send Message <ArrowRight className="w-4 h-4 ml-2" />
+                      </>
+                    )}
                   </Button>
                 </form>
               )}
@@ -882,12 +1226,11 @@ function Contact() {
 }
 
 /* ───────────────────── Footer ───────────────────── */
-function Footer() {
+function Footer({ onOrder }: { onOrder: (plan?: string) => void }) {
   return (
     <footer className="bg-gray-950 text-gray-400 pt-16 pb-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-10 mb-12">
-          {/* Brand */}
           <div className="sm:col-span-2 lg:col-span-1">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-9 h-9 rounded-lg bg-emerald-600 flex items-center justify-center">
@@ -902,7 +1245,6 @@ function Footer() {
             </p>
           </div>
 
-          {/* Quick Links */}
           <div>
             <h4 className="text-white font-semibold mb-4">Quick Links</h4>
             <ul className="space-y-2 text-sm">
@@ -916,7 +1258,6 @@ function Footer() {
             </ul>
           </div>
 
-          {/* Services */}
           <div>
             <h4 className="text-white font-semibold mb-4">Services</h4>
             <ul className="space-y-2 text-sm">
@@ -930,10 +1271,9 @@ function Footer() {
             </ul>
           </div>
 
-          {/* Contact */}
           <div>
             <h4 className="text-white font-semibold mb-4">Contact</h4>
-            <ul className="space-y-3 text-sm">
+            <ul className="space-y-3 text-sm mb-6">
               <li className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-emerald-400" />
                 hello@webcraft.dev
@@ -947,6 +1287,12 @@ function Footer() {
                 San Francisco, CA
               </li>
             </ul>
+            <Button
+              onClick={() => onOrder()}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full px-6 text-sm"
+            >
+              Order Now <ShoppingCart className="w-4 h-4 ml-1" />
+            </Button>
           </div>
         </div>
 
@@ -989,22 +1335,31 @@ function ScrollTop() {
 
 /* ───────────────────── Page ───────────────────── */
 export default function Home() {
+  const [orderOpen, setOrderOpen] = useState(false)
+  const [selectedPlan, setSelectedPlan] = useState<string | undefined>(undefined)
+
+  const handleOrder = useCallback((plan?: string) => {
+    setSelectedPlan(plan || undefined)
+    setOrderOpen(true)
+  }, [])
+
   return (
     <div className="min-h-screen flex flex-col">
-      <Navbar />
+      <Navbar onOrder={handleOrder} />
       <main className="flex-1">
-        <Hero />
-        <Services />
-        <Portfolio />
+        <Hero onOrder={handleOrder} />
+        <Services onOrder={handleOrder} />
+        <Portfolio onOrder={handleOrder} />
         <Process />
         <Testimonials />
-        <Pricing />
-        <About />
-        <CtaBanner />
-        <Contact />
+        <Pricing onOrder={handleOrder} />
+        <About onOrder={handleOrder} />
+        <CtaBanner onOrder={handleOrder} />
+        <Contact onOrder={handleOrder} />
       </main>
-      <Footer />
+      <Footer onOrder={handleOrder} />
       <ScrollTop />
+      <OrderModal open={orderOpen} onClose={() => setOrderOpen(false)} preselectedPlan={selectedPlan} />
     </div>
   )
 }
