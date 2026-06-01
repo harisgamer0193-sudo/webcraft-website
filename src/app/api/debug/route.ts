@@ -5,32 +5,18 @@ export async function GET() {
 
   // Check 1: Environment variables
   results.env = {
-    POSTGRES_URL: !!process.env.POSTGRES_URL,
+    POSTGRES_PRISMA_URL: !!process.env.POSTGRES_PRISMA_URL,
     POSTGRES_URL_NON_POOLING: !!process.env.POSTGRES_URL_NON_POOLING,
+    POSTGRES_URL: !!process.env.POSTGRES_URL,
     SMTP_USER: !!process.env.SMTP_USER,
     OWNER_EMAIL: process.env.OWNER_EMAIL || 'NOT SET',
   }
 
-  // Check 2: Try database connection with Neon
+  // Check 2: Try database connection with Prisma
   try {
-    const { neon } = await import('@neondatabase/serverless')
-    const connectionString = process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL || ''
-    const sql = neon(connectionString)
-    await sql`CREATE TABLE IF NOT EXISTS orders (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      email TEXT NOT NULL,
-      phone TEXT,
-      plan TEXT NOT NULL,
-      project_type TEXT,
-      budget TEXT,
-      message TEXT NOT NULL,
-      status TEXT DEFAULT 'new',
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    )`
-    const rows = await sql`SELECT COUNT(*) as cnt FROM orders`
-    results.database = { status: 'CONNECTED', orderCount: rows[0]?.cnt || 0 }
+    const { db } = await import('@/lib/db')
+    const count = await db.order.count()
+    results.database = { status: 'CONNECTED', orderCount: count }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     results.database = { status: 'FAILED', error: message }
