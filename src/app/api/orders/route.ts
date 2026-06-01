@@ -1,13 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { sql } from '@vercel/postgres'
 import { sendOrderEmail, sendCustomerConfirmation } from '@/lib/email'
+
+// Create the orders table if it doesn't exist yet
+async function ensureTable() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS orders (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT,
+      plan TEXT NOT NULL,
+      project_type TEXT,
+      budget TEXT,
+      message TEXT NOT NULL,
+      status TEXT DEFAULT 'new',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `
+}
+
+// Generate a simple unique ID
+function makeId() {
+  return 'ord_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+}
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const { name, email, phone, plan, projectType, budget, message } = body
 
-    // Validate required fields
     if (!name || !email || !plan || !message) {
       return NextResponse.json(
         { error: 'Name, email, plan, and message are required.' },
@@ -15,30 +38,24 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Save order to database
-    const order = await db.order.create({
-      data: {
-        name,
-        email,
-        phone: phone || null,
-        plan,
-        projectType: projectType || null,
-        budget: budget || null,
-        message,
-      },
-    })
+    // Make sure table exists
+    await ensureTable()
 
-    // Send email notification to owner (non-blocking)
+    const id = makeId()
+
+    // Save order to database
+    await sql`
+      INSERT INTO orders (id, name, email, phone, plan, project_type, budget, message)
+      VALUES (${id}, ${name}, ${email}, ${phone || null}, ${plan}, ${projectType || null}, ${budget || null}, ${message})
+    `
+
+    // Send emails (non-blocking)
     const orderData = { name, email, phone, plan, projectType, budget, message }
-    sendOrderEmail(orderData).catch((err) =>
-      console.error('Owner email send failed:', err)
-    )
-    sendCustomerConfirmation(orderData).catch((err) =>
-      console.error('Customer email send failed:', err)
-    )
+    sendOrderEmail(orderData).catch((err) => console.error('Owner email error:', err))
+    sendCustomerConfirmation(orderData).catch((err) => console.error('Customer email error:', err))
 
     return NextResponse.json(
-      { success: true, order: { id: order.id, name: order.name, plan: order.plan } },
+      { success: true, order: { id, name, plan } },
       { status: 201 }
     )
   } catch (error) {
@@ -50,19 +67,28 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET — for the owner to view all orders
+// GET — view all orders
 export async function GET() {
   try {
-    const orders = await db.order.findMany({
-      orderBy: { createdAt: 'desc' },
-    })
+    await ensureTable()
+    const result = await sql`SELECT * FROM orders ORDER BY created_at DESC`
+    const orders = result.rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      phone: row.phone,
+      plan: row.plan,
+      projectType: row.project_type,
+      budget: row.budget,
+      message: row.message,
+      status: row.status,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }))
     return NextResponse.json({ orders })
   } catch (error) {
     console.error('Fetch orders error:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch orders.' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to fetch orders.' }, { status: 500 })
   }
 }
 
@@ -73,11 +99,8 @@ export async function PATCH(req: NextRequest) {
     if (!id || !status) {
       return NextResponse.json({ error: 'Order ID and status are required.' }, { status: 400 })
     }
-    const updated = await db.order.update({
-      where: { id },
-      data: { status },
-    })
-    return NextResponse.json({ success: true, order: updated })
+    await sql`UPDATE orders SET status = ${status}, updated_at = NOW() WHERE id = ${id}`
+    return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Order update error:', error)
     return NextResponse.json({ error: 'Failed to update order.' }, { status: 500 })
@@ -91,7 +114,7 @@ export async function DELETE(req: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'Order ID is required.' }, { status: 400 })
     }
-    await db.order.delete({ where: { id } })
+    await sql`DELETE FROM orders WHERE id = ${id}`
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Order delete error:', error)
