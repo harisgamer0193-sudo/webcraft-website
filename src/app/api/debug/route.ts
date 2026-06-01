@@ -6,15 +6,16 @@ export async function GET() {
   // Check 1: Environment variables
   results.env = {
     POSTGRES_URL: !!process.env.POSTGRES_URL,
-    POSTGRES_PRISMA_URL: !!process.env.POSTGRES_PRISMA_URL,
     POSTGRES_URL_NON_POOLING: !!process.env.POSTGRES_URL_NON_POOLING,
     SMTP_USER: !!process.env.SMTP_USER,
     OWNER_EMAIL: process.env.OWNER_EMAIL || 'NOT SET',
   }
 
-  // Check 2: Try database connection
+  // Check 2: Try database connection with Neon
   try {
-    const { sql } = await import('@vercel/postgres')
+    const { neon } = await import('@neondatabase/serverless')
+    const connectionString = process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL || ''
+    const sql = neon(connectionString)
     await sql`CREATE TABLE IF NOT EXISTS orders (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -28,14 +29,14 @@ export async function GET() {
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )`
-    const count = await sql`SELECT COUNT(*) as cnt FROM orders`
-    results.database = { status: 'CONNECTED', orderCount: count.rows[0]?.cnt || 0 }
+    const rows = await sql`SELECT COUNT(*) as cnt FROM orders`
+    results.database = { status: 'CONNECTED', orderCount: rows[0]?.cnt || 0 }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     results.database = { status: 'FAILED', error: message }
   }
 
-  // Check 3: Try email connection
+  // Check 3: Email
   try {
     const nodemailer = await import('nodemailer')
     const transporter = nodemailer.default.createTransport({

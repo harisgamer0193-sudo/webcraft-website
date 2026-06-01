@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sql } from '@vercel/postgres'
+import { neon } from '@neondatabase/serverless'
 import { sendOrderEmail, sendCustomerConfirmation } from '@/lib/email'
+
+// Connect using the non-pooling URL for direct SQL queries
+function getSql() {
+  const connectionString = process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL || ''
+  return neon(connectionString)
+}
 
 // Create the orders table if it doesn't exist yet
 async function ensureTable() {
+  const sql = getSql()
   await sql`
     CREATE TABLE IF NOT EXISTS orders (
       id TEXT PRIMARY KEY,
@@ -44,6 +51,7 @@ export async function POST(req: NextRequest) {
     const id = makeId()
 
     // Save order to database
+    const sql = getSql()
     await sql`
       INSERT INTO orders (id, name, email, phone, plan, project_type, budget, message)
       VALUES (${id}, ${name}, ${email}, ${phone || null}, ${plan}, ${projectType || null}, ${budget || null}, ${message})
@@ -60,8 +68,9 @@ export async function POST(req: NextRequest) {
     )
   } catch (error) {
     console.error('Order creation error:', error)
+    const message = error instanceof Error ? error.message : 'Unknown error'
     return NextResponse.json(
-      { error: 'Failed to create order. Please try again.' },
+      { error: 'Failed to create order.', detail: message },
       { status: 500 }
     )
   }
@@ -71,8 +80,9 @@ export async function POST(req: NextRequest) {
 export async function GET() {
   try {
     await ensureTable()
-    const result = await sql`SELECT * FROM orders ORDER BY created_at DESC`
-    const orders = result.rows.map((row) => ({
+    const sql = getSql()
+    const rows = await sql`SELECT * FROM orders ORDER BY created_at DESC`
+    const orders = rows.map((row: Record<string, unknown>) => ({
       id: row.id,
       name: row.name,
       email: row.email,
@@ -88,7 +98,8 @@ export async function GET() {
     return NextResponse.json({ orders })
   } catch (error) {
     console.error('Fetch orders error:', error)
-    return NextResponse.json({ error: 'Failed to fetch orders.' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Unknown error'
+    return NextResponse.json({ error: 'Failed to fetch orders.', detail: message }, { status: 500 })
   }
 }
 
@@ -99,6 +110,7 @@ export async function PATCH(req: NextRequest) {
     if (!id || !status) {
       return NextResponse.json({ error: 'Order ID and status are required.' }, { status: 400 })
     }
+    const sql = getSql()
     await sql`UPDATE orders SET status = ${status}, updated_at = NOW() WHERE id = ${id}`
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -114,6 +126,7 @@ export async function DELETE(req: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: 'Order ID is required.' }, { status: 400 })
     }
+    const sql = getSql()
     await sql`DELETE FROM orders WHERE id = ${id}`
     return NextResponse.json({ success: true })
   } catch (error) {
