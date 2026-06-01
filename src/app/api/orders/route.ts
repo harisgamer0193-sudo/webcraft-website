@@ -65,3 +65,36 @@ export async function GET() {
     )
   }
 }
+
+// PATCH — update order status
+export async function PATCH(req: NextRequest) {
+  try {
+    const { id, status } = await req.json()
+    if (!id || !status) {
+      return NextResponse.json({ error: 'Order ID and status are required.' }, { status: 400 })
+    }
+    const updated = await db.order.update({
+      where: { id },
+      data: { status },
+    })
+    return NextResponse.json({ success: true, order: updated })
+  } catch (error) {
+    console.error('Order update error:', error)
+    return NextResponse.json({ error: 'Failed to update order.' }, { status: 500 })
+  }
+}
+
+// DELETE — remove an order
+export async function DELETE(req: NextRequest) {
+  try {
+    const { id } = await req.json()
+    if (!id) {
+      return NextResponse.json({ error: 'Order ID is required.' }, { status: 400 })
+    }
+    await db.order.delete({ where: { id } })
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Order delete error:', error)
+    return NextResponse.json({ error: 'Failed to delete order.' }, { status: 500 })
+  }
+}
